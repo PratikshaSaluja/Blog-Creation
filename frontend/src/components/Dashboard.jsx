@@ -31,7 +31,9 @@ import {
   Quote,
   Code,
   Link as LinkIcon,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Menu,
+  MoreVertical
 } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
@@ -295,7 +297,19 @@ const Dashboard = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
   const textareaRef = useRef(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowActionMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   
   const editor = useEditor({
     extensions: [
@@ -597,52 +611,70 @@ const Dashboard = () => {
               </div>
             ) : (
               <>
-                <div className="download-actions-container">
-                  {!isEditing ? (
-                    <>
-                      <button 
-                        onClick={handleEdit}
-                        className="download-btn edit-btn"
-                      >
-                        <SquarePen size={16} />
-                        Edit Blog
-                      </button>
-                      <button 
-                        onClick={() => handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'md')}
-                        className="download-btn"
-                      >
-                        <FileText size={16} />
-                        Download MD
-                      </button>
-                      <button 
-                        onClick={() => handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'docx')}
-                        className="download-btn"
-                      >
-                        <Download size={16} />
-                        Download DOCX
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button 
-                        onClick={handleSave}
-                        className="download-btn save-btn"
-                        disabled={isSaving}
-                      >
-                        <Save size={16} />
-                        {isSaving ? 'Saving...' : 'Save Changes'}
-                      </button>
-                      <button 
-                        onClick={handleCancelEdit}
-                        className="download-btn cancel-btn"
-                        disabled={isSaving}
-                      >
-                        <X size={16} />
-                        Cancel
-                      </button>
-                    </>
-                  )}
+                <div className="chat-header">
+                  <div className="chat-title">
+                    {selectedBlog?.title || "New Blog"}
+                  </div>
+                  <div className="chat-actions" ref={menuRef}>
+                    <button 
+                      className={`action-icon-btn ${showActionMenu ? 'active' : ''}`}
+                      onClick={() => setShowActionMenu(!showActionMenu)}
+                      title="Actions"
+                    >
+                      <Menu size={20} />
+                    </button>
+                    
+                    {showActionMenu && (
+                      <div className="action-dropdown">
+                        {!isEditing ? (
+                          <>
+                            <button 
+                              onClick={() => { handleEdit(); setShowActionMenu(false); }}
+                              className="dropdown-item"
+                            >
+                              <SquarePen size={16} />
+                              Edit Blog
+                            </button>
+                            <button 
+                              onClick={() => { handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'md'); setShowActionMenu(false); }}
+                              className="dropdown-item"
+                            >
+                              <FileText size={16} />
+                              Download MD
+                            </button>
+                            <button 
+                              onClick={() => { handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'docx'); setShowActionMenu(false); }}
+                              className="dropdown-item"
+                            >
+                              <Download size={16} />
+                              Download DOCX
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => { handleSave(); setShowActionMenu(false); }}
+                              className="dropdown-item save-item"
+                              disabled={isSaving}
+                            >
+                              <Save size={16} />
+                              {isSaving ? 'Saving...' : 'Save Changes'}
+                            </button>
+                            <button 
+                              onClick={() => { handleCancelEdit(); setShowActionMenu(false); }}
+                              className="dropdown-item cancel-item"
+                              disabled={isSaving}
+                            >
+                              <X size={16} />
+                              Cancel
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
+
                 {isEditing ? (
                    <div className="editor-container tiptap-container" style={{ position: 'relative', zIndex: 10 }}>
                     <MenuBar editor={editor} filename={generatedBlog?.filename || selectedBlog?.filename} />

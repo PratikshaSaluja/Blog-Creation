@@ -486,11 +486,8 @@ ORCH_SYSTEM = """You are a JSON technical blog planner. Return ONLY valid JSON m
   ]
 }
 
-CRITICAL: Each task MUST have between 3 and 6 bullets. No more, no less.
-CRITICAL: A plan should have at most 5 tasks (sections) to ensure rapid delivery.
-CRITICAL: The 'blog_kind' field MUST be exactly one of: "explainer", "tutorial", "news_roundup", "comparison", "system_design".
-CRITICAL: Do NOT include any tasks that request external links, "Further Reading", "Additional Resources", "References", "Examples", "Applications", or "Questions" sections.
-CRITICAL: Set 'requires_code' and 'requires_citations' to FALSE for ALL tasks. We do NOT want code snippets or evidence sections.
+CRITICAL: WORD COUNT BUDGET: Sum of 'target_words' MUST match 'TOTAL WORD BUDGET' exactly.
+CRITICAL: Do NOT plan more than 'MAX SECTIONS'.
 """
 
 def orchestrator_node(state: State) -> dict:
@@ -514,23 +511,48 @@ def orchestrator_node(state: State) -> dict:
 
     forced_kind = "news_roundup" if mode == "open_book" else None
 
+    # Programmatic word count extraction
+    topic = state['topic']
+    word_match = re.search(r"(\d+)\s*words?", topic, re.IGNORECASE)
+    total_budget = int(word_match.group(1)) if word_match else 1000
+    
+    max_sections = 5
+    if total_budget < 400:
+        max_sections = 2
+    elif total_budget < 700:
+        max_sections = 3
+
     plan = planner.invoke(
         [
             SystemMessage(content=ORCH_SYSTEM),
             HumanMessage(
                 content=(
-                    f"Topic: {state['topic']}\n"
+                    f"Topic: {topic}\n"
+                    f"TOTAL WORD BUDGET: {total_budget}\n"
+                    f"MAX SECTIONS: {max_sections}\n"
                     f"Mode: {mode}\n"
-                    f"As-of: {state['as_of']} (recency_days={state['recency_days']})\n"
-                    f"{'Force blog_kind=news_roundup' if forced_kind else ''}\n\n"
-                    f"Evidence:\n{[e.model_dump() for e in evidence][:16]}\n\n"
-                    "Return JSON."
+                    f"Return JSON."
                 )
             ),
         ]
     )
-    if forced_kind:
-        plan.blog_kind = "news_roundup"
+    
+    # --- HARD ENFORCEMENT ---
+    # 1. Enforce Max Sections
+    if len(plan.tasks) > max_sections:
+        plan.tasks = plan.tasks[:max_sections]
+    
+    # 2. Scale Word Budgets to match Total Budget
+    current_total = sum(t.target_words for t in plan.tasks)
+    if current_total > 0:
+        multiplier = total_budget / current_total
+        for t in plan.tasks:
+            t.target_words = int(t.target_words * multiplier)
+    
+    # 3. Prevent meta-commentary titles
+    for t in plan.tasks:
+        t.title = t.title.replace(topic, "").strip(" :")
+        if not t.title: t.title = "Overview"
 
     is_fallback = state.get("llm_fallback_active", False)
     if hasattr(plan, "additional_kwargs") and plan.additional_kwargs.get("llm_fallback_active"):
@@ -565,28 +587,15 @@ def fanout(state: State):
 # -----------------------------
 # 7) Worker
 # -----------------------------
-WORKER_SYSTEM = """You are a senior technical writer and developer advocate.
-Write ONE section of a technical blog post in Markdown.
+WORKER_SYSTEM = """You are a robotic technical writing machine. 
+ONLY output the requested section markdown starting with "## <Section Title>".
 
-Constraints:
-- Cover ALL bullets in order.
-- Target words ±15%.
-- Output only section markdown starting with "## <Section Title>".
-
-NO LINKS & NO SECTIONS POLICY (CRITICAL):
-- DO NOT include ANY markdown links (e.g. [text](url)) or raw URLs (e.g. http://...).
-- DO NOT include citations, reference sections, or "Further Reading" sections.
-- DO NOT include email links (mailto:...) or phone numbers.
-- DO NOT include any section or header named "Evidence", "Code snippet", "References", "Examples", "Applications", or "Questions". 
-- The outcome must be pure text ONLY. NO code snippets or external resource lists are allowed.
-
-Scope guard:
-- If blog_kind=="news_roundup", do NOT drift into tutorials (scraping/RSS/how to fetch).
-  Focus on events + implications.
-
-Grounding:
-- Use the provided grounding data silently to ensure factual accuracy. 
-- SILENT GROUNDING: Do NOT introduce any specific claim unless supported by data, but DO NOT cite the sources or mention the data source.
+STRICT CONSTRAINTS (VIOLATION RESULTS IN TERMINATION):
+1. **NO INTROS/OUTROS**: NEVER say "Hello", "Welcome", "In this section", "I am excited", "I have researched", "Thank you", or "Conclusion".
+2. **FACTUAL ACCURACY**: UPSC stands for Union Public Service Commission. It is for Indian Civil Services (IAS, IPS, IFS). It is NOT for IITs, engineering, or medical entrance.
+3. **STRICT WORD BUDGET**: Stay within ±5% of the 'Target words'. Every extra word wastes the user's budget.
+4. **NO REPETITION**: If you already mentioned a fact, do NOT repeat it. 
+5. **NO LINKS/CODE**: Pure text ONLY.
 """
 
 def worker_node(payload: dict) -> dict:
@@ -657,13 +666,83 @@ def merge_content(state: State) -> dict:
     # but the user was very clear: "dont add links")
     body = re.sub(r"https?://\S+", "", body)
     
-    # 3. Remove "Evidence:", "Code snippet:", "References:", "Examples:", "Applications:", and "Questions:" headers
-    body = re.sub(r"(?i)^#*\s*Evidence:.*$", "", body, flags=re.MULTILINE)
-    body = re.sub(r"(?i)^#*\s*Code snippet:.*$", "", body, flags=re.MULTILINE)
-    body = re.sub(r"(?i)^#*\s*References:.*$", "", body, flags=re.MULTILINE)
-    body = re.sub(r"(?i)^#*\s*Examples:.*$", "", body, flags=re.MULTILINE)
-    body = re.sub(r"(?i)^#*\s*Applications:.*$", "", body, flags=re.MULTILINE)
-    body = re.sub(r"(?i)^#*\s*Questions:.*$", "", body, flags=re.MULTILINE)
+    # 3. Aggressive Header/Meta Cleanup
+    bad_headers = [
+        "Evidence", "References?", "Further Reading", "Grounding Data", "Thank You", 
+        "Requirements", "Knowledge Base", "Business Applications", "Source Code",
+        "Blog Post", "Background Information", "Advantages for Industries", "Disadvantages",
+        "Code snippet", "Example", "Bullets", "Roadmap", "Conclusion", "Summary", "Implications"
+    ]
+    for bh in bad_headers:
+        body = re.sub(rf"(?i)^#*\s*{bh}:?.*$", "", body, flags=re.MULTILINE)
+    
+    # 4. Remove meta-commentary, research mentions, and placeholders
+    meta_patterns = [
+        r"(?i)\(DO NOT cite or list these\)",
+        r"(?i)Please note:.*",
+        r"(?i)Stay tuned for.*",
+        r"(?i)I (am proud to say|have done|researched|consulted).*?research.*",
+        r"(?i)This (blog post|section) (provides|contains|is significantly).*?overview.*",
+        r"(?i)The focus here is on.*?rather than.*",
+        r"(?i)Remember, technology is advancing.*",
+        r"(?i)I hope this summary.*",
+        r"(?i)Leaving a comment while you're working.*"
+    ]
+    for pattern in meta_patterns:
+        body = re.sub(pattern, "", body)
+    
+    # Remove bracketed link placeholders [Link], [Reference Link 1], etc.
+    body = re.sub(r"\[[A-Za-z\s]*\d?\](\s*\(\s*[^)]*\s*\))?", "", body)
+    
+    # 5. Cross-Section Deduplication (Paragraph level)
+    paragraphs = body.split("\n\n")
+    unique_paragraphs = []
+    seen_content = set()
+    for p in paragraphs:
+        p = p.strip()
+        if not p: continue
+        # Clean paragraph for comparison
+        clean_p = re.sub(r"\W+", "", p).lower()
+        if not clean_p or len(clean_p) < 40: # Allow short headers or transitions
+            unique_paragraphs.append(p)
+            continue
+        if clean_p in seen_content:
+            continue
+        seen_content.add(clean_p)
+        unique_paragraphs.append(p)
+    body = "\n\n".join(unique_paragraphs).strip()
+
+    # 6. Deduplicate Headers
+    lines = body.splitlines()
+    new_lines = []
+    seen_headers = set()
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            header = stripped[3:].lower().strip(" :")
+            # Remove redundant "in 300 words" from headers
+            header = re.sub(r"in \d+ words", "", header).strip()
+            if header in seen_headers:
+                continue 
+            seen_headers.add(header)
+            new_lines.append(f"## {header.title()}")
+        else:
+            new_lines.append(line)
+    body = "\n".join(new_lines).strip()
+
+    # 7. Final Hard Pruning
+    topic = state.get("topic", "")
+    word_match = re.search(r"(\d+)\s*words?", str(topic), re.IGNORECASE)
+    if word_match:
+        budget = int(word_match.group(1))
+        words = body.split()
+        if len(words) > budget:
+            # Hard cutoff at budget + 10%
+            body = " ".join(words[:int(budget * 1.1)])
+            # Try to end on a full sentence
+            last_period = body.rfind(".")
+            if last_period > budget * 0.8:
+                body = body[:last_period + 1]
     
     merged_md = f"# {plan.blog_title}\n\n{body}\n"
     return {"merged_md": merged_md, "final": merged_md}
