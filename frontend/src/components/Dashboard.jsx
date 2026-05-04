@@ -103,7 +103,7 @@ const ColorPickerPopover = ({ onSelect, onClose, current }) => {
   );
 };
 
-const MenuBar = ({ editor, filename }) => {
+const MenuBar = ({ editor, filename, onSave, onCancel, isSaving }) => {
   const [showTextColor, setShowTextColor] = useState(false);
   const [showHighlight, setShowHighlight] = useState(false);
   const fileInputRef = useRef(null);
@@ -245,6 +245,31 @@ const MenuBar = ({ editor, filename }) => {
           />
         </button>
       </div>
+
+      <div className="menu-divider" />
+
+      <div className="menu-group" style={{ marginLeft: 'auto' }}>
+        <button 
+          onClick={onSave} 
+          className="menu-btn save-btn" 
+          disabled={isSaving}
+          title="Save Changes"
+          style={{ color: '#059669', background: '#ecfdf5' }}
+        >
+          <Save size={18} />
+          <span style={{ marginLeft: '4px', fontSize: '12px' }}>{isSaving ? 'Saving...' : 'Save'}</span>
+        </button>
+        <button 
+          onClick={onCancel} 
+          className="menu-btn cancel-btn" 
+          disabled={isSaving}
+          title="Cancel Editing"
+          style={{ color: '#dc2626', background: '#fef2f2' }}
+        >
+          <X size={18} />
+          <span style={{ marginLeft: '4px', fontSize: '12px' }}>Cancel</span>
+        </button>
+      </div>
     </div>
   );
 };
@@ -298,6 +323,7 @@ const Dashboard = () => {
   const [editedContent, setEditedContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
+  const [isLoadingBlog, setIsLoadingBlog] = useState(false);
   const textareaRef = useRef(null);
   const menuRef = useRef(null);
 
@@ -382,6 +408,7 @@ const Dashboard = () => {
 
   const handleBlogSelect = async (blog) => {
     const token = localStorage.getItem('token');
+    setIsLoadingBlog(true);
     try {
       const res = await axios.get(`${API_BASE}/blog/${blog.filename}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -389,8 +416,12 @@ const Dashboard = () => {
       setSelectedBlog({ ...blog, content: res.data.content });
       setGeneratedBlog(null);
       setError('');
+      setIsEditing(false); // Reset editing mode when switching blogs
     } catch (err) {
       console.error('Failed to fetch blog content', err);
+      setError('Failed to load blog content.');
+    } finally {
+      setIsLoadingBlog(false);
     }
   };
 
@@ -620,24 +651,30 @@ const Dashboard = () => {
                       className={`action-icon-btn ${showActionMenu ? 'active' : ''}`}
                       onClick={() => setShowActionMenu(!showActionMenu)}
                       title="Actions"
+                      style={{ width: 'auto', padding: '0 12px', gap: '8px' }}
                     >
+                      <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Actions</span>
                       <Menu size={20} />
                     </button>
                     
                     {showActionMenu && (
                       <div className="action-dropdown">
-                        {!isEditing ? (
+                        {(true) && (
                           <>
-                            <button 
-                              onClick={() => { handleEdit(); setShowActionMenu(false); }}
-                              className="dropdown-item"
-                            >
-                              <SquarePen size={16} />
-                              Edit Blog
-                            </button>
+                            {!isEditing && (
+                              <button 
+                                onClick={() => { handleEdit(); setShowActionMenu(false); }}
+                                className="dropdown-item"
+                              >
+                                <SquarePen size={16} />
+                                Edit Blog
+                              </button>
+                            )}
                             <button 
                               onClick={() => { handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'md'); setShowActionMenu(false); }}
                               className="dropdown-item"
+                              disabled={isEditing}
+                              title={isEditing ? "Save or cancel editing to download" : "Download Markdown"}
                             >
                               <FileText size={16} />
                               Download MD
@@ -645,28 +682,11 @@ const Dashboard = () => {
                             <button 
                               onClick={() => { handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'docx'); setShowActionMenu(false); }}
                               className="dropdown-item"
+                              disabled={isEditing}
+                              title={isEditing ? "Save or cancel editing to download" : "Download DOCX"}
                             >
                               <Download size={16} />
                               Download DOCX
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button 
-                              onClick={() => { handleSave(); setShowActionMenu(false); }}
-                              className="dropdown-item save-item"
-                              disabled={isSaving}
-                            >
-                              <Save size={16} />
-                              {isSaving ? 'Saving...' : 'Save Changes'}
-                            </button>
-                            <button 
-                              onClick={() => { handleCancelEdit(); setShowActionMenu(false); }}
-                              className="dropdown-item cancel-item"
-                              disabled={isSaving}
-                            >
-                              <X size={16} />
-                              Cancel
                             </button>
                           </>
                         )}
@@ -675,9 +695,31 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {isEditing ? (
-                   <div className="editor-container tiptap-container" style={{ position: 'relative', zIndex: 10 }}>
-                    <MenuBar editor={editor} filename={generatedBlog?.filename || selectedBlog?.filename} />
+                {isLoadingBlog ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4rem' }}>
+                    <div className="status-indicator" style={{ position: 'static', marginBottom: '1rem' }}>
+                      <div className="progress-dot active" style={{ animation: 'pulse 1.5s infinite' }} />
+                    </div>
+                    <div style={{ color: '#666', fontSize: '0.9rem' }}>Loading blog content...</div>
+                  </div>
+                ) : isEditing ? (
+                   <div 
+                    className="editor-container tiptap-container" 
+                    style={{ 
+                      position: 'relative', 
+                      zIndex: 10,
+                      opacity: isSaving ? 0.6 : 1,
+                      pointerEvents: isSaving ? 'none' : 'auto',
+                      transition: 'opacity 0.2s ease'
+                    }}
+                  >
+                    <MenuBar 
+                      editor={editor} 
+                      filename={generatedBlog?.filename || selectedBlog?.filename} 
+                      onSave={handleSave}
+                      onCancel={handleCancelEdit}
+                      isSaving={isSaving}
+                    />
                     <EditorContent editor={editor} className="tiptap-editor" />
                   </div>
                 ) : (

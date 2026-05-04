@@ -365,11 +365,12 @@ def markdown_to_docx(md_text: str, blog_title: str, db: Session, blog_id: int) -
                 for m in matches:
                     pre_text = line[last_end:m.start()].strip()
                     if pre_text:
-                        doc.add_paragraph(pre_text)
+                        p = doc.add_paragraph()
+                        _add_formatted_runs(p, pre_text)
                     
-                    src = m.group("src").strip().lstrip("./")
-                    # If it's a relative path starting with 'images/', fetch from DB
-                    img_filename = src.split("/")[-1] if src.startswith("images/") else src
+                    src = m.group("src").strip().strip("<>").lstrip("./")
+                    # Always just take the last part as the filename
+                    img_filename = src.split("/")[-1]
                     
                     db_image = db.query(models.BlogImage).filter(
                         models.BlogImage.filename == img_filename,
@@ -385,7 +386,7 @@ def markdown_to_docx(md_text: str, blog_title: str, db: Session, blog_id: int) -
                     
                     if db_image:
                         try:
-                            from PIL import Image, features
+                            from PIL import Image
                             img_buffer = io.BytesIO(db_image.content)
                             with Image.open(img_buffer) as img:
                                 if img.mode in ("RGBA", "P"):
@@ -407,19 +408,54 @@ def markdown_to_docx(md_text: str, blog_title: str, db: Session, blog_id: int) -
                 
                 post_text = line[last_end:].strip()
                 if post_text:
-                    doc.add_paragraph(post_text)
+                    p = doc.add_paragraph()
+                    _add_formatted_runs(p, post_text)
             else:
-                doc.add_paragraph(line)
+                p = doc.add_paragraph()
+                _add_formatted_runs(p, line)
         
         else:
             clean_line = re.sub(r"(?<!\!)\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", line)
-            doc.add_paragraph(clean_line)
+            p = doc.add_paragraph()
+            _add_formatted_runs(p, clean_line)
         
         i += 1
 
     out_io = io.BytesIO()
     doc.save(out_io)
     return out_io.getvalue()
+
+def _add_formatted_runs(paragraph, text: str):
+    """Helper to add bold/italic runs to a python-docx paragraph."""
+    # Split by ** for bold
+    parts = re.split(r'(\*\*.*?\*\*)', text)
+    for part in parts:
+        if part.startswith('**') and part.endswith('**'):
+            bold_text = part[2:-2]
+            # Split bold text by * for italic
+            sub_parts = re.split(r'(\*.*?\*)', bold_text)
+            for sub_part in sub_parts:
+                if sub_part.startswith('*') and sub_part.endswith('*'):
+                    run = paragraph.add_run(sub_part[1:-1])
+                    run.bold = True
+                    run.italic = True
+                else:
+                    run = paragraph.add_run(sub_part)
+                    run.bold = True
+        else:
+            # Split by * for italic
+            sub_parts = re.split(r'(\*.*?\*)', part)
+            for sub_part in sub_parts:
+                if sub_part.startswith('*') and sub_part.endswith('*'):
+                    run = paragraph.add_run(sub_part[1:-1])
+                    run.italic = True
+                else:
+                    paragraph.add_run(sub_part)
+
+    return paragraph
+
+    # We need to add the return statements back to markdown_to_docx
+
 
 @app.get("/download-docx/{filename}")
 def download_docx(filename: str, db: Session = Depends(database.get_db), current_user: models.User = Depends(get_current_user)):

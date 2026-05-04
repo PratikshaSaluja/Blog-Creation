@@ -50,6 +50,12 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 .auth-title {
   font-size: 2.5rem;
   font-weight: 800;
@@ -279,12 +285,52 @@ body {
   line-height: 1.6;
   font-size: 1.1rem;
   color: #1a1a1a;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 .blog-output h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 1.5rem; }
 .blog-output h2 { font-size: 1.6rem; font-weight: 600; margin-top: 2rem; margin-bottom: 1rem; }
 .blog-output p { margin-bottom: 1.2rem; }
-.blog-output img { border-radius: 12px; margin: 1.5rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.blog-output img { 
+  max-width: 100%;
+  height: auto;
+  max-height: 500px;
+  display: block;
+  margin: 1.5rem auto;
+  border-radius: 12px; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+  object-fit: contain;
+}
+
+.blog-output code {
+  background: #f1f5f9;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.blog-output pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.blog-output pre code {
+  color: #f8fafc !important;
+  background: transparent !important;
+  padding: 0 !important;
+  font-family: inherit;
+}
 
 .input-container {
   position: sticky;
@@ -487,9 +533,15 @@ body {
   text-align: left;
 }
 
-.dropdown-item:hover {
+.dropdown-item:hover:not(:disabled) {
   background: #f8fafc;
   color: #1e293b;
+}
+
+.dropdown-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .dropdown-item svg {
@@ -638,6 +690,16 @@ body {
   color: #64748b;
   font-style: italic;
   margin-bottom: 1rem;
+}
+
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  max-height: 500px;
+  display: block;
+  margin: 1.5rem auto;
+  border-radius: 12px;
+  object-fit: contain;
 }
 
 .ProseMirror code {

@@ -214,8 +214,8 @@ def get_llm_chain(schema=None, static_fallback=None):
             if not ChatOllama:
                 raise ImportError("langchain_ollama not installed")
             
-            print(f"🤖 Trying Ollama (qwen2:0.5b) fallback... (timeout=300s)")
-            o_llm = ChatOllama(model="qwen2:0.5b", timeout=300)
+            print(f"🤖 Trying Ollama (qwen2.5:0.5b) fallback... (timeout=300s)")
+            o_llm = ChatOllama(model="qwen2.5:0.5b", timeout=300)
             if schema:
                 hint = f"Respond ONLY with valid JSON matching this schema: {schema.schema_json()}"
                 params = list(input_params) + [HumanMessage(content=hint)] if isinstance(input_params, list) else f"{input_params}\n\n{hint}"
@@ -588,7 +588,7 @@ def fanout(state: State):
 # 7) Worker
 # -----------------------------
 WORKER_SYSTEM = """You are a robotic technical writing machine. 
-ONLY output the requested section markdown starting with "## <Section Title>".
+ONLY output the requested section markdown starting with a level 2 header (e.g. "## Your Section Name").
 
 STRICT CONSTRAINTS (VIOLATION RESULTS IN TERMINATION):
 1. **NO INTROS/OUTROS**: NEVER say "Hello", "Welcome", "In this section", "I am excited", "I have researched", "Thank you", or "Conclusion".
@@ -735,16 +735,18 @@ def merge_content(state: State) -> dict:
     word_match = re.search(r"(\d+)\s*words?", str(topic), re.IGNORECASE)
     if word_match:
         budget = int(word_match.group(1))
-        words = body.split()
-        if len(words) > budget:
-            # Hard cutoff at budget + 10%
-            body = " ".join(words[:int(budget * 1.1)])
-            # Try to end on a full sentence
-            last_period = body.rfind(".")
-            if last_period > budget * 0.8:
-                body = body[:last_period + 1]
+        words_only = body.split()
+        if len(words_only) > budget:
+            target_words = int(budget * 1.1)
+            matches = list(re.finditer(r'\S+', body))
+            if len(matches) > target_words:
+                cutoff_index = matches[target_words].end()
+                body = body[:cutoff_index]
+                last_period = body.rfind(".")
+                if last_period > len(body) * 0.8:
+                    body = body[:last_period + 1]
     
-    merged_md = f"# {plan.blog_title}\n\n{body}\n"
+    merged_md = f"{body}\n"
     return {"merged_md": merged_md, "final": merged_md}
 
 
