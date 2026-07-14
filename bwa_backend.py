@@ -772,13 +772,6 @@ CRITICAL: Preferred size is 512x512 unless it is a very detailed diagram or pano
 """
 
 def decide_images(state: State) -> dict:
-    if state.get("llm_fallback_active"):
-        print("🚨 Fallback active. Skipping image planning.")
-        return {
-            "md_with_placeholders": state["merged_md"],
-            "image_specs": [],
-        }
-
     try:
         planner = get_llm_chain(GlobalImagePlan)
         merged_md = state["merged_md"]
@@ -988,10 +981,6 @@ def generate_and_place_images(state: State) -> dict:
 
     md = state.get("md_with_placeholders") or state["merged_md"]
     
-    if state.get("llm_fallback_active"):
-        print("🚨 Fallback active. Skipping image generation.")
-        return {"final": md, "generated_images": {}}
-
     plan = state["plan"]
     assert plan is not None
     image_specs = state.get("image_specs", []) or []

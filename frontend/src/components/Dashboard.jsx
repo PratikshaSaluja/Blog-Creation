@@ -33,7 +33,8 @@ import {
   Link as LinkIcon,
   Image as ImageIcon,
   Menu,
-  MoreVertical
+  MoreVertical,
+  Copy
 } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
@@ -559,6 +560,19 @@ const Dashboard = () => {
     }
   };
 
+  const handleCopyContent = (silent = false) => {
+    const content = generatedBlog?.final || selectedBlog?.content || '';
+    if (!content) return;
+    
+    navigator.clipboard.writeText(content).then(() => {
+      if (!silent) alert('Blog content copied to clipboard!');
+    }).catch(err => {
+      console.error('Failed to copy: ', err);
+      if (!silent) alert('Failed to copy content.');
+    });
+    setShowActionMenu(false);
+  };
+
   const renderBlog = (content) => {
     return (
       <div className="blog-output">
@@ -647,51 +661,63 @@ const Dashboard = () => {
                     {selectedBlog?.title || "New Blog"}
                   </div>
                   <div className="chat-actions" ref={menuRef}>
-                    <button 
-                      className={`action-icon-btn ${showActionMenu ? 'active' : ''}`}
-                      onClick={() => setShowActionMenu(!showActionMenu)}
-                      title="Actions"
-                      style={{ width: 'auto', padding: '0 12px', gap: '8px' }}
-                    >
-                      <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Actions</span>
-                      <Menu size={20} />
-                    </button>
+
+                    <div style={{ position: 'relative' }}>
+                      <button 
+                        className={`action-icon-btn ${showActionMenu ? 'active' : ''}`}
+                        onClick={() => setShowActionMenu(!showActionMenu)}
+                        title="Actions"
+                        style={{ width: 'auto', padding: '0 12px', gap: '8px' }}
+                      >
+                        <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Actions</span>
+                        <Menu size={20} />
+                      </button>
                     
-                    {showActionMenu && (
-                      <div className="action-dropdown">
-                        {(true) && (
-                          <>
-                            {!isEditing && (
+                      {showActionMenu && (
+                        <div className="action-dropdown" style={{ minWidth: '220px' }}>
+                              {!isEditing && (
+                                <>
+                                  <button 
+                                    onClick={() => { handleEdit(); setShowActionMenu(false); }}
+                                    className="dropdown-item"
+                                  >
+                                    <SquarePen size={16} />
+                                    Edit Blog
+                                  </button>
+                                  
+                                  <button 
+                                    onClick={() => handleCopyContent()}
+                                    className="dropdown-item"
+                                  >
+                                    <Copy size={16} />
+                                    Copy Content
+                                  </button>
+                                  
+                                  <div className="dropdown-divider" style={{ height: '1px', background: '#f1f5f9', margin: '4px 0' }} />
+                                </>
+                              )}
+                              
                               <button 
-                                onClick={() => { handleEdit(); setShowActionMenu(false); }}
+                                onClick={() => { handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'md'); setShowActionMenu(false); }}
                                 className="dropdown-item"
+                                disabled={isEditing}
+                                title={isEditing ? "Save or cancel editing to download" : "Download Markdown"}
                               >
-                                <SquarePen size={16} />
-                                Edit Blog
+                                <FileText size={16} />
+                                Download MD
                               </button>
-                            )}
-                            <button 
-                              onClick={() => { handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'md'); setShowActionMenu(false); }}
-                              className="dropdown-item"
-                              disabled={isEditing}
-                              title={isEditing ? "Save or cancel editing to download" : "Download Markdown"}
-                            >
-                              <FileText size={16} />
-                              Download MD
-                            </button>
-                            <button 
-                              onClick={() => { handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'docx'); setShowActionMenu(false); }}
-                              className="dropdown-item"
-                              disabled={isEditing}
-                              title={isEditing ? "Save or cancel editing to download" : "Download DOCX"}
-                            >
-                              <Download size={16} />
-                              Download DOCX
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
+                              <button 
+                                onClick={() => { handleDownload(generatedBlog?.filename || selectedBlog?.filename, 'docx'); setShowActionMenu(false); }}
+                                className="dropdown-item"
+                                disabled={isEditing}
+                                title={isEditing ? "Save or cancel editing to download" : "Download DOCX"}
+                              >
+                                <Download size={16} />
+                                Download DOCX
+                              </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 

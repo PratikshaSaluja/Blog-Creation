@@ -15,6 +15,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 import io
 from fastapi.security import OAuth2PasswordBearer
 import secrets
+import requests
+import json
 from datetime import datetime, timedelta
 
 # Import the blog writer backend
@@ -326,6 +328,7 @@ def download_md(filename: str, db: Session = Depends(database.get_db), current_u
         media_type="text/markdown",
         headers={"Content-Disposition": f"attachment; filename={blog.filename}"}
     )
+
 
 def markdown_to_docx(md_text: str, blog_title: str, db: Session, blog_id: int) -> bytes:
     """
